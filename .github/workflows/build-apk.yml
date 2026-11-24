@@ -1,0 +1,112 @@
+name: Build signed APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # Backend address baked into the app. Override with the repo variable API_URL.
+  API_URL: ${{ vars.API_URL || 'http://10.0.2.2:3007/api/v1' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project
+        run: flutter create --platforms=android --org com.salonos --project-name outlet_app --no-pub .
+
+      - name: Patch Android manifest
+        run: |
+          set -e
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's|<manifest xmlns:android="http://schemas.android.com/apk/res/android">|<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET"/>|' "$M"
+          sed -i 's|android:label="[^"]*"|android:label="Salon OS"|' "$M"
+          sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$M"
+          grep -q 'android.permission.INTERNET' "$M"
+          grep -q 'Salon OS' "$M"
+
+      - name: Configure signing and disable lintVital
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -e
+          test -n "$KEYSTORE_BASE64" && test -n "$KEYSTORE_PASSWORD" && test -n "$KEY_ALIAS"
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload.p12
+          {
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=upload.p12"
+          } > android/key.properties
+          cat >> android/app/build.gradle.kts <<'GRADLE'
+
+          // ---- appended by CI ----
+          val keyProps = java.util.Properties().apply {
+              val f = rootProject.file("key.properties")
+              if (f.exists()) load(java.io.FileInputStream(f))
+          }
+          android {
+              signingConfigs {
+                  create("release") {
+                      keyAlias = keyProps["keyAlias"] as String
+                      keyPassword = keyProps["keyPassword"] as String
+                      storeFile = file(keyProps["storeFile"] as String)
+                      storePassword = keyProps["storePassword"] as String
+                      storeType = "PKCS12"
+                  }
+              }
+              buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("release")
+                  }
+              }
+              lint {
+                  checkReleaseBuilds = false
+                  abortOnError = false
+              }
+          }
+          GRADLE
+          # Heredoc indentation is stripped by YAML; nothing else to do.
+
+      - run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build release APK
+        run: flutter build apk --release --dart-define=API_URL="$API_URL"
+
+      - name: Prepare artifact
+        run: cp build/app/outputs/flutter-apk/app-release.apk salon-os-outlet.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: salon-os-outlet-apk
+          path: salon-os-outlet.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Salon OS Outlet build ${{ github.run_number }}
+          make_latest: true
+          files: salon-os-outlet.apk
