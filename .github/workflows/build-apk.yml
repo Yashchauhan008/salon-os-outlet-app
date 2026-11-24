@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 env:
-  # Backend address baked into the app. Override with the repo variable API_URL.
-  API_URL: ${{ vars.API_URL || 'http://10.0.2.2:3007/api/v1' }}
+  # Production backend baked into the app. Override with the repo variable API_URL.
+  API_URL: ${{ vars.API_URL || 'https://api.salon.yashchauhan.pro/api/v1' }}
 
 jobs:
   build:

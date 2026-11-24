@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 
 /// Backend address baked in at build time: --dart-define=API_URL=https://host/api/v1
-const String kDefaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3007/api/v1');
+const String kDefaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'https://api.salon.yashchauhan.pro/api/v1');
 
 late AppState appState;
 
