@@ -60,12 +60,13 @@ jobs:
             echo "keyAlias=$KEY_ALIAS"
             echo "storeFile=upload.p12"
           } > android/key.properties
+          sed -i '1i import java.util.Properties\nimport java.io.FileInputStream' android/app/build.gradle.kts
           cat >> android/app/build.gradle.kts <<'GRADLE'
 
           // ---- appended by CI ----
-          val keyProps = java.util.Properties().apply {
+          val keyProps = Properties().apply {
               val f = rootProject.file("key.properties")
-              if (f.exists()) load(java.io.FileInputStream(f))
+              if (f.exists()) load(FileInputStream(f))
           }
           android {
               signingConfigs {
