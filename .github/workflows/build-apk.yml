@@ -32,6 +32,9 @@ jobs:
       - name: Generate Android project
         run: flutter create --platforms=android --org com.salonos --project-name outlet_app --no-pub .
 
+      - name: Remove generated sample test
+        run: rm -rf test
+
       - name: Patch Android manifest
         run: |
           set -e
